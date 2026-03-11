@@ -226,8 +226,8 @@ const App: React.FC = () => {
               <LayoutDashboard size={32} />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100">Evaluador de Contaminantes</h1>
-              <p className="text-slate-500 dark:text-slate-400 font-medium">Análisis avanzado de límites máximos (Valor X)</p>
+              <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100">ResiduoCheck</h1>
+              <p className="text-slate-500 dark:text-slate-400 font-medium">Automatiza el análisis de contaminantes químicos utilizando robustez estadística</p>
             </div>
           </div>
           
@@ -644,72 +644,74 @@ const getChartThemeOptions = (isDark: boolean) => ({
 const DistributionAreaChart: React.FC<{result: EvaluationResult, type: 'normal' | 'lognormal', isDark: boolean}> = ({result, type, isDark}) => {
   const {stats, metadata, muLog, sdLog} = result;
   const limitX = metadata.limitX;
-  const { textColor, gridColor } = getChartThemeOptions(isDark);
+  const { textColor, gridColor } = useMemo(() => getChartThemeOptions(isDark), [isDark]);
   
-  let xMin, xMax;
-  if (type === 'normal') {
-    xMin = stats.mean - 4 * stats.sd;
-    xMax = stats.mean + 4 * stats.sd;
-  } else {
-    xMin = Math.exp(muLog - 4 * sdLog);
-    xMax = Math.exp(muLog + 4 * sdLog);
-  }
-
-  xMin = Math.min(xMin, limitX * 0.5);
-  xMax = Math.max(xMax, limitX * 1.5);
-  if (xMin < 0 && type === 'lognormal') xMin = 0.0001;
-
-  const points = 100;
-  const step = (xMax - xMin) / points;
-  const labels: string[] = [];
-  const complianceData: (number | null)[] = [];
-  const nonComplianceData: (number | null)[] = [];
-
-  for (let i = 0; i <= points; i++) {
-    const x = xMin + i * step;
-    labels.push(x.toFixed(4));
-    
-    const density = type === 'normal' 
-      ? statsUtil.densN(x, stats.mean, stats.sd)
-      : statsUtil.densLN(x, muLog, sdLog);
-
-    if (x <= limitX) {
-      complianceData.push(density);
-      nonComplianceData.push(null);
+  const chartData = useMemo(() => {
+    let xMin, xMax;
+    if (type === 'normal') {
+      xMin = stats.mean - 4 * stats.sd;
+      xMax = stats.mean + 4 * stats.sd;
     } else {
-      if (nonComplianceData.length > 0 && nonComplianceData[nonComplianceData.length - 1] === null && complianceData[complianceData.length -1] !== null) {
-          nonComplianceData[nonComplianceData.length - 1] = density;
-      }
-      complianceData.push(null);
-      nonComplianceData.push(density);
+      xMin = Math.exp(muLog - 4 * sdLog);
+      xMax = Math.exp(muLog + 4 * sdLog);
     }
-  }
 
-  const data = {
-    labels,
-    datasets: [
-      {
-        label: 'Área de Cumplimiento',
-        data: complianceData,
-        borderColor: 'rgb(34, 197, 94)',
-        backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.4)',
-        fill: 'origin',
-        pointRadius: 0,
-        tension: 0.3,
-      },
-      {
-        label: 'Área de No Cumplimiento',
-        data: nonComplianceData,
-        borderColor: 'rgb(239, 68, 68)',
-        backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.4)',
-        fill: 'origin',
-        pointRadius: 0,
-        tension: 0.3,
+    xMin = Math.min(xMin, limitX * 0.5);
+    xMax = Math.max(xMax, limitX * 1.5);
+    if (xMin < 0 && type === 'lognormal') xMin = 0.0001;
+
+    const points = 100;
+    const step = (xMax - xMin) / points;
+    const labels: string[] = [];
+    const complianceData: (number | null)[] = [];
+    const nonComplianceData: (number | null)[] = [];
+
+    for (let i = 0; i <= points; i++) {
+      const x = xMin + i * step;
+      labels.push(x.toFixed(4));
+      
+      const density = type === 'normal' 
+        ? statsUtil.densN(x, stats.mean, stats.sd)
+        : statsUtil.densLN(x, muLog, sdLog);
+
+      if (x <= limitX) {
+        complianceData.push(density);
+        nonComplianceData.push(null);
+      } else {
+        if (nonComplianceData.length > 0 && nonComplianceData[nonComplianceData.length - 1] === null && complianceData[complianceData.length - 1] !== null) {
+            nonComplianceData[nonComplianceData.length - 1] = density;
+        }
+        complianceData.push(null);
+        nonComplianceData.push(density);
       }
-    ]
-  };
+    }
 
-  const options = {
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Área de Cumplimiento',
+          data: complianceData,
+          borderColor: 'rgb(34, 197, 94)',
+          backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.4)',
+          fill: 'origin',
+          pointRadius: 0,
+          tension: 0.3,
+        },
+        {
+          label: 'Área de No Cumplimiento',
+          data: nonComplianceData,
+          borderColor: 'rgb(239, 68, 68)',
+          backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.4)',
+          fill: 'origin',
+          pointRadius: 0,
+          tension: 0.3,
+        }
+      ]
+    };
+  }, [stats, limitX, type, muLog, sdLog, isDark]);
+
+  const options = useMemo(() => ({
     maintainAspectRatio: false,
     plugins: {
       legend: {
@@ -730,131 +732,141 @@ const DistributionAreaChart: React.FC<{result: EvaluationResult, type: 'normal' 
         grid: { color: gridColor }
       }
     }
-  };
+  }), [textColor, gridColor, metadata.units]);
 
-  return <Chart type="line" data={data} options={options} />;
+  return <Chart type="line" data={chartData} options={options} />;
 };
 
 const HistogramChart: React.FC<{result: EvaluationResult, isDark: boolean}> = ({result, isDark}) => {
   const {stats, metadata} = result;
-  const { textColor, gridColor } = getChartThemeOptions(isDark);
-  const nBins = Math.min(20, Math.max(8, Math.round(Math.sqrt(stats.n))));
-  const range = stats.max - stats.min;
-  const binWidth = range / nBins || statsUtil.EPS;
+  const { textColor, gridColor } = useMemo(() => getChartThemeOptions(isDark), [isDark]);
   
-  const bins = new Array(nBins).fill(0);
-  stats.sorted.forEach(v => {
-    let idx = Math.floor((v - stats.min) / binWidth);
-    if (idx >= nBins) idx = nBins - 1;
-    bins[idx]++;
-  });
+  const chartData = useMemo(() => {
+    const nBins = Math.min(20, Math.max(8, Math.round(Math.sqrt(stats.n))));
+    const range = stats.max - stats.min;
+    const binWidth = range / nBins || statsUtil.EPS;
+    
+    const bins = new Array(nBins).fill(0);
+    stats.sorted.forEach(v => {
+      let idx = Math.floor((v - stats.min) / binWidth);
+      if (idx >= nBins) idx = nBins - 1;
+      bins[idx]++;
+    });
 
-  const labels = Array.from({length: nBins}, (_, i) => (stats.min + i * binWidth).toFixed(3));
-  
-  const normalPoints = statsUtil.seq(stats.min, stats.max, 50).map(x => ({
-    x: x.toFixed(3),
-    y: statsUtil.densN(x, stats.mean, stats.sd) * stats.n * binWidth
-  }));
+    const labels = Array.from({length: nBins}, (_, i) => (stats.min + i * binWidth).toFixed(3));
+    
+    const normalPoints = statsUtil.seq(stats.min, stats.max, 50).map(x => ({
+      x: x.toFixed(3),
+      y: statsUtil.densN(x, stats.mean, stats.sd) * stats.n * binWidth
+    }));
 
-  const data = {
-    labels,
-    datasets: [
-      {
-        type: 'bar' as const,
-        label: 'Frecuencia Absoluta',
-        data: bins,
-        backgroundColor: isDark ? 'rgba(6, 182, 212, 0.3)' : 'rgba(6, 182, 212, 0.4)',
-        borderColor: 'rgba(6, 182, 212, 1)',
-        borderWidth: 1,
-        order: 2
-      },
-      {
-        type: 'line' as const,
-        label: 'Curva Normal',
-        data: normalPoints.map(p => p.y),
-        borderColor: isDark ? 'rgba(129, 140, 248, 0.9)' : 'rgba(99, 102, 241, 0.8)',
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.4,
-        fill: false,
-        order: 1
-      },
-      {
-        type: 'line' as const,
-        label: `Límite X (${metadata.limitX})`,
-        data: labels.map(() => null),
-        borderColor: '#f43f5e',
-        borderWidth: 2,
-        borderDash: [5, 5],
-        pointRadius: 0,
-      }
-    ]
-  };
+    return {
+      labels,
+      datasets: [
+        {
+          type: 'bar' as const,
+          label: 'Frecuencia Absoluta',
+          data: bins,
+          backgroundColor: isDark ? 'rgba(6, 182, 212, 0.3)' : 'rgba(6, 182, 212, 0.4)',
+          borderColor: 'rgba(6, 182, 212, 1)',
+          borderWidth: 1,
+          order: 2
+        },
+        {
+          type: 'line' as const,
+          label: 'Curva Normal',
+          data: normalPoints.map(p => p.y),
+          borderColor: isDark ? 'rgba(129, 140, 248, 0.9)' : 'rgba(99, 102, 241, 0.8)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.4,
+          fill: false,
+          order: 1
+        },
+        {
+          type: 'line' as const,
+          label: `Límite X (${metadata.limitX})`,
+          data: labels.map(() => null),
+          borderColor: '#f43f5e',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+        }
+      ]
+    };
+  }, [stats, metadata.limitX, isDark]);
 
-  return <Chart type="bar" data={data} options={{ 
+  const options = useMemo(() => ({ 
     maintainAspectRatio: false, 
     plugins: { 
-      legend: { position: 'bottom', labels: { color: textColor } } 
+      legend: { position: 'bottom' as const, labels: { color: textColor } } 
     },
     scales: {
       y: { ticks: { color: textColor }, grid: { color: gridColor } },
       x: { ticks: { color: textColor }, grid: { color: gridColor } }
     }
-  }} />;
+  }), [textColor, gridColor]);
+
+  return <Chart type="bar" data={chartData} options={options} />;
 };
 
 const QQChart: React.FC<{result: EvaluationResult, isDark: boolean}> = ({result, isDark}) => {
   const {stats} = result;
-  const { textColor, gridColor } = getChartThemeOptions(isDark);
-  const n = stats.sorted.length;
-  const probs = stats.sorted.map((_, i) => (i + 0.5) / n);
-  const zTheo = probs.map(p => statsUtil.invCdfN(p));
-  const theo = zTheo.map(z => stats.mean + z * stats.sd);
+  const { textColor, gridColor } = useMemo(() => getChartThemeOptions(isDark), [isDark]);
   
-  const scatterData = theo.map((t, i) => ({ x: t, y: stats.sorted[i] }));
-  const min = Math.min(theo[0], stats.sorted[0]);
-  const max = Math.max(theo[n-1], stats.sorted[n-1]);
-  
-  const data = {
-    datasets: [
-      {
-        label: 'Cuantiles',
-        data: scatterData,
-        backgroundColor: isDark ? 'rgba(129, 140, 248, 0.9)' : 'rgba(79, 70, 229, 0.8)',
-        pointRadius: 4,
-      },
-      {
-        label: 'Referencia y=x',
-        data: [{x: min, y: min}, {x: max, y: max}],
-        type: 'line' as const,
-        borderColor: isDark ? 'rgba(148, 163, 184, 0.3)' : 'rgba(148, 163, 184, 0.5)',
-        borderWidth: 1,
-        pointRadius: 0,
-        fill: false,
-      }
-    ]
-  };
+  const chartData = useMemo(() => {
+    const n = stats.sorted.length;
+    const probs = stats.sorted.map((_, i) => (i + 0.5) / n);
+    const zTheo = probs.map(p => statsUtil.invCdfN(p));
+    const theo = zTheo.map(z => stats.mean + z * stats.sd);
+    
+    const scatterData = theo.map((t, i) => ({ x: t, y: stats.sorted[i] }));
+    const min = Math.min(theo[0], stats.sorted[0]);
+    const max = Math.max(theo[n-1], stats.sorted[n-1]);
+    
+    return {
+      datasets: [
+        {
+          label: 'Cuantiles',
+          data: scatterData,
+          backgroundColor: isDark ? 'rgba(129, 140, 248, 0.9)' : 'rgba(79, 70, 229, 0.8)',
+          pointRadius: 4,
+        },
+        {
+          label: 'Referencia y=x',
+          data: [{x: min, y: min}, {x: max, y: max}],
+          type: 'line' as const,
+          borderColor: isDark ? 'rgba(148, 163, 184, 0.3)' : 'rgba(148, 163, 184, 0.5)',
+          borderWidth: 1,
+          pointRadius: 0,
+          fill: false,
+        }
+      ]
+    };
+  }, [stats, isDark]);
+
+  const options = useMemo(() => ({ 
+    maintainAspectRatio: false, 
+    scales: { 
+      x: { 
+        title: { display: true, text: 'Cuantiles Teóricos', color: textColor },
+        ticks: { color: textColor },
+        grid: { color: gridColor }
+      }, 
+      y: { 
+        title: { display: true, text: 'Cuantiles Observados', color: textColor },
+        ticks: { color: textColor },
+        grid: { color: gridColor }
+      } 
+    },
+    plugins: { legend: { display: false } }
+  }), [textColor, gridColor]);
 
   return (
     <Chart 
       type="scatter" 
-      data={data as any} 
-      options={{ 
-        maintainAspectRatio: false, 
-        scales: { 
-          x: { 
-            title: { display: true, text: 'Cuantiles Teóricos', color: textColor },
-            ticks: { color: textColor },
-            grid: { color: gridColor }
-          }, 
-          y: { 
-            title: { display: true, text: 'Cuantiles Observados', color: textColor },
-            ticks: { color: textColor },
-            grid: { color: gridColor }
-          } 
-        },
-        plugins: { legend: { display: false } }
-      }} 
+      data={chartData as any} 
+      options={options} 
     />
   );
 };

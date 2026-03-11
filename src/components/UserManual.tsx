@@ -21,7 +21,7 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose }) => {
             </div>
             <div>
               <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Manual de Uso e Interpretación</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Evaluador de Límites de Contaminantes</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">ResiduoCheck</p>
             </div>
           </div>
           <button 

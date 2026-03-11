@@ -31,45 +31,61 @@ export const densLN = (x: number, mu: number, sd: number): number =>
 
 export function getDescStats(data: number[]): Stats {
   const n = data.length;
-  const mean = data.reduce((a, b) => a + b, 0) / n;
-  const diffs = data.map(v => v - mean);
-  const sqDiffs = diffs.map(v => v ** 2);
-  const variance = sqDiffs.reduce((a, b) => a + b, 0) / n;
+  if (n === 0) {
+    return {
+      n: 0, mean: 0, median: 0, mode: 0, sd: 0, sem: 0, min: 0, max: 0, q1: 0, q3: 0,
+      sorted: [], skewness: 0, kurtosis: 0, randomError: 0
+    };
+  }
+
+  let sum = 0;
+  let min = data[0];
+  let max = data[0];
+  const frequency = new Map<number, number>();
+  let maxFreq = 0;
+  let modes: number[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const v = data[i];
+    sum += v;
+    if (v < min) min = v;
+    if (v > max) max = v;
+
+    const freq = (frequency.get(v) || 0) + 1;
+    frequency.set(v, freq);
+    if (freq > maxFreq) {
+      maxFreq = freq;
+      modes = [v];
+    } else if (freq === maxFreq) {
+      modes.push(v);
+    }
+  }
+
+  const mean = sum / n;
+  let sumSqDiff = 0;
+  let sumCuDiff = 0;
+  let sumQuDiff = 0;
+
+  for (let i = 0; i < n; i++) {
+    const diff = data[i] - mean;
+    const diffSq = diff * diff;
+    sumSqDiff += diffSq;
+    sumCuDiff += diffSq * diff;
+    sumQuDiff += diffSq * diffSq;
+  }
+
+  const variance = sumSqDiff / n;
   const sd = Math.sqrt(variance);
   const sem = sd / Math.sqrt(Math.max(n, 1));
+  
   const sorted = [...data].sort((a, b) => a - b);
-  const min = sorted[0];
-  const max = sorted[n - 1];
   const median = n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
   const q1 = sorted[Math.floor((n - 1) * 0.25)];
   const q3 = sorted[Math.floor((n - 1) * 0.75)];
 
-  // Asimetría (Fisher-Pearson)
-  const skewness = sd > EPS 
-    ? (diffs.map(v => v ** 3).reduce((a, b) => a + b, 0) / n) / (sd ** 3)
-    : 0;
-
-  // Curtosis (Exceso de curtosis)
-  const kurtosis = sd > EPS
-    ? (diffs.map(v => v ** 4).reduce((a, b) => a + b, 0) / n) / (sd ** 4) - 3
-    : 0;
-
-  // Error aleatorio (frecuentemente representado por SEM o k*u)
-  // Aquí usamos SEM como base del error aleatorio del promedio
+  const skewness = sd > EPS ? (sumCuDiff / n) / (sd ** 3) : 0;
+  const kurtosis = sd > EPS ? (sumQuDiff / n) / (sd ** 4) - 3 : 0;
   const randomError = sem;
-
-  const frequency: Record<number, number> = {};
-  let maxFreq = 0;
-  let modes: number[] = [];
-  for (const value of data) {
-    frequency[value] = (frequency[value] || 0) + 1;
-    if (frequency[value] > maxFreq) {
-      maxFreq = frequency[value];
-      modes = [value];
-    } else if (frequency[value] === maxFreq) {
-      modes.push(value);
-    }
-  }
 
   return { 
     n, mean, median, mode: modes[0], sd, sem, min, max, q1, q3, sorted,
