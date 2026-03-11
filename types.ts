@@ -41,6 +41,22 @@ export interface ComplianceLevel {
   description: string;
 }
 
+export interface TrendPoint {
+  date: string;
+  value: number;
+  timestamp: number;
+}
+
+export interface TrendAnalysis {
+  slope: number;
+  intercept: number;
+  r2: number;
+  prediction: number;
+  isIncreasing: boolean;
+  points: TrendPoint[];
+  forecastDate: string;
+}
+
 export interface EvaluationResult {
   stats: Stats;
   metadata: Metadata;
@@ -56,4 +72,5 @@ export interface EvaluationResult {
   normalRisk: ComplianceLevel;
   logNormalRisk: ComplianceLevel;
   percentiles: Array<{ label: string; value: number; percent: number; complies: boolean }>;
+  trend?: TrendAnalysis;
 }

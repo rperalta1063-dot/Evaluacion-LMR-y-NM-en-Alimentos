@@ -98,21 +98,51 @@ const App: React.FC = () => {
   }, [isDark]);
 
   const handleEvaluate = () => {
-    const rawData = dataInput.split(/[\n,;\s]+/)
-      .map(s => s.trim().replace(',', '.'))
-      .filter(Boolean)
-      .map(Number)
-      .filter(v => isFinite(v));
+    const lines = dataInput.split(/[\n;]+/).map(l => l.trim()).filter(Boolean);
+    const rawPoints: { date: string, value: number }[] = [];
+    const rawValues: number[] = [];
 
-    if (rawData.length < 3) {
-      alert("Por favor ingrese al menos 3 valores válidos.");
+    lines.forEach((line, index) => {
+      // Try to match "YYYY-MM-DD: value" or "YYYY-MM-DD, value"
+      const dateMatch = line.match(/^(\d{4}-\d{2}-\d{2})[:,\s]+([\d.,]+)$/);
+      
+      if (dateMatch) {
+        const dateStr = dateMatch[1];
+        const val = Number(dateMatch[2].replace(',', '.'));
+        if (isFinite(val)) {
+          rawPoints.push({ date: dateStr, value: val });
+          rawValues.push(val);
+          return;
+        }
+      }
+
+      // If no date match, treat as a list of numbers
+      const parts = line.split(/[\s,]+/).filter(Boolean);
+      parts.forEach((p, pIdx) => {
+        const val = Number(p.replace(',', '.'));
+        if (isFinite(val)) {
+          const date = new Date(metadata.dateFrom);
+          if (!isNaN(date.getTime())) {
+            date.setDate(date.getDate() + index + pIdx);
+            rawPoints.push({ date: date.toISOString().split('T')[0], value: val });
+          } else {
+            // Fallback if dateFrom is invalid
+            rawPoints.push({ date: `Punto ${rawValues.length + 1}`, value: val });
+          }
+          rawValues.push(val);
+        }
+      });
+    });
+
+    if (rawValues.length < 3) {
+      alert("Por favor ingrese al menos 3 valores válidos. Puede usar una lista simple o el formato 'AAAA-MM-DD: valor'.");
       return;
     }
 
-    const st = statsUtil.getDescStats(rawData);
+    const st = statsUtil.getDescStats(rawValues);
     const X = metadata.limitX;
 
-    const A2 = statsUtil.calculateADNormal(rawData, st);
+    const A2 = statsUtil.calculateADNormal(rawValues, st);
     const PAD = statsUtil.adPValue(A2, st.n);
     const W = statsUtil.calculateSWNormal(st);
     const PSW = statsUtil.swPValue(W, st.n);
@@ -126,14 +156,16 @@ const App: React.FC = () => {
 
     const normality: NormalityResults = { A2, PAD, W, PSW, isNormal, note: normNote };
 
-    const pEmp = (rawData.filter(v => v <= X).length / st.n) * 100;
+    const pEmp = (rawValues.filter(v => v <= X).length / st.n) * 100;
     
-    const pos = rawData.filter(v => v > 0);
+    const pos = rawValues.filter(v => v > 0);
     const muLog = pos.length ? pos.map(Math.log).reduce((a, b) => a + b, 0) / pos.length : NaN;
     const sdLog = pos.length ? Math.sqrt(pos.map(v => Math.log(v)).reduce((a, b) => a + (b - muLog) ** 2, 0) / pos.length) : NaN;
     
     const pNormal = statsUtil.cdfN(X, st.mean, st.sd) * 100;
     const pLog = isFinite(sdLog) ? statsUtil.cdfN(Math.log(X), muLog, sdLog) * 100 : 0;
+
+    const trend = statsUtil.calculateTrend(rawPoints);
 
     const evalResult: EvaluationResult = {
       stats: st,
@@ -156,7 +188,8 @@ const App: React.FC = () => {
         { label: 'P90', value: statsUtil.getPercentile(st.sorted, 90), percent: 90, complies: X >= statsUtil.getPercentile(st.sorted, 90) },
         { label: 'P95', value: statsUtil.getPercentile(st.sorted, 95), percent: 95, complies: X >= statsUtil.getPercentile(st.sorted, 95) },
         { label: 'P99', value: statsUtil.getPercentile(st.sorted, 99), percent: 99, complies: X >= statsUtil.getPercentile(st.sorted, 99) }
-      ]
+      ],
+      trend
     };
 
     setResult(evalResult);
@@ -190,11 +223,28 @@ const App: React.FC = () => {
       ['Curtosis', result.stats.kurtosis],
       ['Error Aleatorio', result.stats.randomError],
       [],
-      ['Cumplimiento', '%'],
-      ['Empírico', result.pEmp],
-      ['Normal', result.pNormal],
-      ['Log-normal', result.pLog]
+      ['Pruebas de Normalidad', 'Valor', 'p-valor'],
+      ['Anderson-Darling (A2)', result.normality.A2.toFixed(4), result.normality.PAD.toFixed(4)],
+      ['Shapiro-Wilk (W)', result.normality.W.toFixed(4), result.normality.PSW.toFixed(4)],
+      ['Distribución Normal?', result.normality.isNormal ? 'SÍ' : 'NO'],
+      [],
+      ['Modelo de Evaluación', 'Cumplimiento (%)', 'Nivel de Riesgo'],
+      ['Empírico', result.pEmp.toFixed(2), result.empiricalRisk.level],
+      ['Normal', result.pNormal.toFixed(2), result.normalRisk.level],
+      ['Log-normal', result.pLog.toFixed(2), result.logNormalRisk.level],
+      [],
+      ['Percentiles', 'Valor'],
+      ...result.percentiles.map(p => [p.label, p.value.toFixed(4)])
     ];
+
+    if (result.trend) {
+      wsData.push([], ['Análisis de Tendencia', 'Valor']);
+      wsData.push(['Pendiente', result.trend.slope.toFixed(6)]);
+      wsData.push(['R-cuadrado', result.trend.r2.toFixed(4)]);
+      wsData.push(['Predicción (30d)', result.trend.prediction.toFixed(4)]);
+      wsData.push(['Tendencia', result.trend.isIncreasing ? 'Ascendente' : 'Descendente']);
+    }
+
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     XLSX.utils.book_append_sheet(wb, ws, 'Resultados');
     XLSX.writeFile(wb, `Evaluacion_${result.metadata.contaminant}.xlsx`);
@@ -203,17 +253,61 @@ const App: React.FC = () => {
   const handleExportPDF = () => {
     if (!result) return;
     const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text('Reporte de Evaluación de Contaminantes', 20, 20);
+    let y = 20;
+
+    doc.setFontSize(18);
+    doc.text('Reporte de Evaluación de Contaminantes', 20, y);
+    y += 10;
+
     doc.setFontSize(10);
-    doc.text(`Periodo: Del ${result.metadata.dateFrom} al ${result.metadata.dateTo}`, 20, 28);
-    doc.setFontSize(12);
-    doc.text(`Contaminante: ${result.metadata.contaminant}`, 20, 40);
-    doc.text(`Alimento: ${result.metadata.food}`, 20, 47);
-    doc.text(`Límite X: ${result.metadata.limitX} ${result.metadata.units}`, 20, 54);
-    doc.text(`Cumplimiento Empírico: ${result.pEmp.toFixed(2)}%`, 20, 65);
-    doc.text(`Estado: ${result.empiricalRisk.level}`, 20, 72);
-    doc.save(`Reporte_${result.metadata.contaminant}.pdf`);
+    doc.text(`Generado el: ${new Date().toLocaleString()}`, 20, y);
+    y += 5;
+    doc.text(`Periodo: Del ${result.metadata.dateFrom} al ${result.metadata.dateTo}`, 20, y);
+    y += 15;
+
+    doc.setFontSize(14);
+    doc.text('Información del Muestreo', 20, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.text(`Contaminante: ${result.metadata.contaminant}`, 25, y); y += 6;
+    doc.text(`Alimento: ${result.metadata.food}`, 25, y); y += 6;
+    doc.text(`Sitio: ${result.metadata.site}`, 25, y); y += 6;
+    doc.text(`Límite Normativo (X): ${result.metadata.limitX} ${result.metadata.units}`, 25, y); y += 12;
+
+    doc.setFontSize(14);
+    doc.text('Resultados de Cumplimiento', 20, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.text(`Modelo Empírico: ${result.pEmp.toFixed(2)}% - ${result.empiricalRisk.level}`, 25, y); y += 6;
+    doc.text(`Modelo Normal: ${result.pNormal.toFixed(2)}% - ${result.normalRisk.level}`, 25, y); y += 6;
+    doc.text(`Modelo Log-normal: ${result.pLog.toFixed(2)}% - ${result.logNormalRisk.level}`, 25, y); y += 12;
+
+    doc.setFontSize(14);
+    doc.text('Pruebas de Normalidad', 20, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.text(`Anderson-Darling: A2=${result.normality.A2.toFixed(3)}, p=${result.normality.PAD.toFixed(3)}`, 25, y); y += 6;
+    doc.text(`Shapiro-Wilk: W=${result.normality.W.toFixed(3)}, p=${result.normality.PSW.toFixed(3)}`, 25, y); y += 6;
+    doc.text(`Conclusión: ${result.normality.note}`, 25, y); y += 12;
+
+    if (result.trend) {
+      doc.setFontSize(14);
+      doc.text('Análisis de Tendencia', 20, y);
+      y += 8;
+      doc.setFontSize(10);
+      doc.text(`Tendencia: ${result.trend.isIncreasing ? 'ASCENDENTE' : 'DESCENDENTE'}`, 25, y); y += 6;
+      doc.text(`Correlación (R2): ${result.trend.r2.toFixed(4)}`, 25, y); y += 6;
+      doc.text(`Predicción a 30 días: ${result.trend.prediction.toFixed(4)} ${result.metadata.units}`, 25, y); y += 12;
+    }
+
+    doc.setFontSize(14);
+    doc.text('Estadísticos Descriptivos', 20, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.text(`n: ${result.stats.n} | Media: ${result.stats.mean.toFixed(4)} | DE: ${result.stats.sd.toFixed(4)}`, 25, y); y += 6;
+    doc.text(`Mín: ${result.stats.min.toFixed(4)} | Máx: ${result.stats.max.toFixed(4)} | Mediana: ${result.stats.median.toFixed(4)}`, 25, y); y += 6;
+
+    doc.save(`Reporte_${result.metadata.contaminant.replace(/\s+/g, '_')}.pdf`);
   };
 
   return (
@@ -262,7 +356,7 @@ const App: React.FC = () => {
                 <div>
                   <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase mb-1">Contaminante</label>
                   <input 
-                    className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none transition-all dark:text-slate-200"
+                    className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600"
                     value={metadata.contaminant}
                     onChange={e => setMetadata({...metadata, contaminant: e.target.value})}
                   />
@@ -270,7 +364,7 @@ const App: React.FC = () => {
                 <div>
                   <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase mb-1">Alimento</label>
                   <input 
-                    className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none transition-all dark:text-slate-200"
+                    className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600"
                     value={metadata.food}
                     onChange={e => setMetadata({...metadata, food: e.target.value})}
                   />
@@ -278,7 +372,7 @@ const App: React.FC = () => {
                 <div>
                   <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase mb-1">Ubicación / Sitio</label>
                   <input 
-                    className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none transition-all dark:text-slate-200"
+                    className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600"
                     value={metadata.site}
                     onChange={e => setMetadata({...metadata, site: e.target.value})}
                   />
@@ -292,14 +386,14 @@ const App: React.FC = () => {
                     <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">Del</span>
                     <input 
                       type="date"
-                      className="flex-1 min-w-0 px-2 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none transition-all text-sm dark:text-slate-200"
+                      className="flex-1 min-w-0 px-2 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all text-sm dark:text-slate-100"
                       value={metadata.dateFrom}
                       onChange={e => setMetadata({...metadata, dateFrom: e.target.value})}
                     />
                     <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">al</span>
                     <input 
                       type="date"
-                      className="flex-1 min-w-0 px-2 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none transition-all text-sm dark:text-slate-200"
+                      className="flex-1 min-w-0 px-2 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all text-sm dark:text-slate-100"
                       value={metadata.dateTo}
                       onChange={e => setMetadata({...metadata, dateTo: e.target.value})}
                     />
@@ -312,7 +406,7 @@ const App: React.FC = () => {
                     <input 
                       type="number"
                       step="any"
-                      className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none transition-all font-mono dark:text-slate-200"
+                      className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all font-mono dark:text-slate-100"
                       value={metadata.limitX}
                       onChange={e => setMetadata({...metadata, limitX: parseFloat(e.target.value)})}
                     />
@@ -320,7 +414,7 @@ const App: React.FC = () => {
                   <div>
                     <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase mb-1">Unidades</label>
                     <select 
-                      className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none transition-all dark:text-slate-200"
+                      className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all dark:text-slate-100"
                       value={metadata.units}
                       onChange={e => setMetadata({...metadata, units: e.target.value})}
                     >
@@ -341,12 +435,12 @@ const App: React.FC = () => {
               </h2>
               <textarea 
                 rows={5}
-                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-cyan-500 outline-none transition-all font-mono text-sm dark:text-slate-200"
-                placeholder="Ej: 0.012, 0.045, 0.033..."
+                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all font-mono text-sm dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600"
+                placeholder="Ej: 2024-01-01: 0.012, 2024-01-02: 0.045..."
                 value={dataInput}
                 onChange={e => setDataInput(e.target.value)}
               ></textarea>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-2 italic">Soporta valores separados por comas, espacios o saltos de línea.</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-2 italic">Soporta valores simples o formato temporal (AAAA-MM-DD: valor) separados por saltos de línea.</p>
             </div>
           </div>
 
@@ -436,12 +530,30 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                   <BarChart3 size={20} className="text-cyan-600" />
-                   Distribución de Frecuencias
+                   <TrendingUp size={20} className="text-cyan-600" />
+                   Análisis de Tendencia Temporal
                  </h3>
                  <div className="h-[300px]">
-                   <HistogramChart result={result} isDark={isDark} />
+                   <TrendChart result={result} isDark={isDark} />
                  </div>
+                 {result.trend && (
+                   <div className="mt-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800/50">
+                     <div className="flex items-center justify-between">
+                       <div>
+                         <p className="text-xs font-bold text-slate-400 uppercase">Predicción (30 días)</p>
+                         <p className="text-lg font-black text-slate-800 dark:text-slate-100">{formatSig(result.trend.prediction)} {result.metadata.units}</p>
+                         <p className="text-[10px] text-slate-500">Fecha estimada: {result.trend.forecastDate}</p>
+                       </div>
+                       <div className="text-right">
+                         <p className="text-xs font-bold text-slate-400 uppercase">Correlación (R²)</p>
+                         <p className="text-lg font-black text-slate-800 dark:text-slate-100">{result.trend.r2.toFixed(3)}</p>
+                         <p className={`text-[10px] font-bold ${result.trend.isIncreasing ? 'text-red-500' : 'text-green-500'}`}>
+                           {result.trend.isIncreasing ? 'Tendencia Ascendente' : 'Tendencia Descendente'}
+                         </p>
+                       </div>
+                     </div>
+                   </div>
+                 )}
               </div>
               
               <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
@@ -491,7 +603,7 @@ const App: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-1 bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">Tabla de Percentiles</h3>
                  <div className="overflow-x-auto">
                    <table className="w-full text-left text-sm">
@@ -521,10 +633,20 @@ const App: React.FC = () => {
                  </div>
               </div>
 
-              <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
+                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                   <BarChart3 size={20} className="text-cyan-600" />
+                   Histograma
+                 </h3>
+                 <div className="h-[300px]">
+                   <HistogramChart result={result} isDark={isDark} />
+                 </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
                    <BarChart3 size={20} className="text-indigo-600" />
-                   Gráfico Q-Q (Cuantiles)
+                   Gráfico Q-Q
                  </h3>
                  <div className="h-[300px]">
                    <QQChart result={result} isDark={isDark} />
@@ -595,12 +717,12 @@ const StatCard: React.FC<{label: string, value: string | number, icon: React.Rea
   };
 
   const darkColors: Record<string, string> = {
-    cyan: "bg-slate-900 text-cyan-400 border-cyan-900/30",
-    indigo: "bg-slate-900 text-indigo-400 border-indigo-900/30",
-    slate: "bg-slate-900 text-slate-300 border-slate-800",
-    green: "bg-slate-900 text-green-400 border-green-900/30",
-    yellow: "bg-slate-900 text-yellow-400 border-yellow-900/30",
-    red: "bg-slate-900 text-red-400 border-red-900/30",
+    cyan: "bg-slate-900/50 text-cyan-400 border-cyan-500/20",
+    indigo: "bg-slate-900/50 text-indigo-400 border-indigo-500/20",
+    slate: "bg-slate-900/50 text-slate-300 border-slate-700/50",
+    green: "bg-slate-900/50 text-green-400 border-green-500/20",
+    yellow: "bg-slate-900/50 text-yellow-400 border-yellow-500/20",
+    red: "bg-slate-900/50 text-red-400 border-red-500/20",
   };
 
   const activeColorSet = isDark ? darkColors : lightColors;
@@ -630,15 +752,15 @@ const ComplianceRow: React.FC<{label: string, percent: number, risk: any, isDark
         ></div>
       </div>
     </div>
-    <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase tracking-tight min-w-[100px] text-center transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : risk.className}`}>
+    <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase tracking-tight min-w-[100px] text-center transition-colors ${isDark ? 'bg-slate-900/80 border-slate-700 text-slate-300' : risk.className}`}>
       {risk.level}
     </div>
   </div>
 );
 
 const getChartThemeOptions = (isDark: boolean) => ({
-  textColor: isDark ? '#94a3b8' : '#64748b',
-  gridColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(226, 232, 240, 0.5)',
+  textColor: isDark ? '#cbd5e1' : '#64748b', // Brighter text for dark mode (slate-300)
+  gridColor: isDark ? 'rgba(51, 65, 85, 0.3)' : 'rgba(226, 232, 240, 0.5)', // Subtle grid for dark mode (slate-700)
 });
 
 const DistributionAreaChart: React.FC<{result: EvaluationResult, type: 'normal' | 'lognormal', isDark: boolean}> = ({result, type, isDark}) => {
@@ -735,6 +857,72 @@ const DistributionAreaChart: React.FC<{result: EvaluationResult, type: 'normal' 
   }), [textColor, gridColor, metadata.units]);
 
   return <Chart type="line" data={chartData} options={options} />;
+};
+
+const TrendChart: React.FC<{result: EvaluationResult, isDark: boolean}> = ({result, isDark}) => {
+  const {trend, metadata} = result;
+  const { textColor, gridColor } = useMemo(() => getChartThemeOptions(isDark), [isDark]);
+  
+  if (!trend) return <div className="flex items-center justify-center h-full text-slate-400">Datos insuficientes para análisis de tendencia</div>;
+
+  const labels = trend.points.map(p => p.date);
+  const values = trend.points.map(p => p.value);
+  const regressionLine = trend.points.map(p => trend.slope * p.timestamp + trend.intercept);
+
+  const data = {
+    labels,
+    datasets: [
+      {
+        label: 'Concentración Observada',
+        data: values,
+        borderColor: 'rgb(6, 182, 212)',
+        backgroundColor: 'rgba(6, 182, 212, 0.5)',
+        pointRadius: 4,
+        tension: 0.2,
+        type: 'line' as const,
+      },
+      {
+        label: 'Línea de Tendencia',
+        data: regressionLine,
+        borderColor: isDark ? 'rgba(244, 63, 94, 0.8)' : 'rgba(244, 63, 94, 0.6)',
+        borderWidth: 2,
+        borderDash: [5, 5],
+        pointRadius: 0,
+        fill: false,
+        type: 'line' as const,
+      },
+      {
+        label: 'Límite Normativo',
+        data: labels.map(() => metadata.limitX),
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
+        borderWidth: 1,
+        borderDash: [2, 2],
+        pointRadius: 0,
+        fill: false,
+        type: 'line' as const,
+      }
+    ]
+  };
+
+  const options = {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom' as const, labels: { color: textColor, boxWidth: 12 } }
+    },
+    scales: {
+      y: { 
+        ticks: { color: textColor }, 
+        grid: { color: gridColor },
+        title: { display: true, text: metadata.units, color: textColor }
+      },
+      x: { 
+        ticks: { color: textColor, maxRotation: 45, minRotation: 45 }, 
+        grid: { display: false } 
+      }
+    }
+  };
+
+  return <Chart type="line" data={data} options={options} />;
 };
 
 const HistogramChart: React.FC<{result: EvaluationResult, isDark: boolean}> = ({result, isDark}) => {

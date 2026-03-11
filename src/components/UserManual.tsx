@@ -44,13 +44,13 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose }) => {
               <p>
                 Esta aplicación está diseñada para evaluar el cumplimiento de límites de contaminantes en alimentos utilizando métodos estadísticos avanzados. Permite determinar si un conjunto de muestras cumple con los límites regulatorios establecidos.
               </p>
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800/50">
                 <h4 className="font-bold text-sm uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Público Objetivo</h4>
                 <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                  <li className="flex items-center gap-2">• Inspectores de calidad alimentaria</li>
-                  <li className="flex items-center gap-2">• Laboratorios de análisis de alimentos</li>
-                  <li className="flex items-center gap-2">• Gerentes de control de calidad</li>
-                  <li className="flex items-center gap-2">• Investigadores en seguridad alimentaria</li>
+                  <li className="flex items-center gap-2 text-slate-600 dark:text-slate-300">• Inspectores de calidad alimentaria</li>
+                  <li className="flex items-center gap-2 text-slate-600 dark:text-slate-300">• Laboratorios de análisis de alimentos</li>
+                  <li className="flex items-center gap-2 text-slate-600 dark:text-slate-300">• Gerentes de control de calidad</li>
+                  <li className="flex items-center gap-2 text-slate-600 dark:text-slate-300">• Investigadores en seguridad alimentaria</li>
                 </ul>
               </div>
             </div>
@@ -65,19 +65,19 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-3">
                 <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm">Información de Muestreo</h4>
-                <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-                  <li><b className="text-slate-800 dark:text-slate-200">Contaminante:</b> Nombre del analito (ej: Plomo, Mercurio).</li>
-                  <li><b className="text-slate-800 dark:text-slate-200">Alimento:</b> Tipo de producto muestreado.</li>
-                  <li><b className="text-slate-800 dark:text-slate-200">Lugar/Región:</b> Origen geográfico de las muestras.</li>
-                  <li><b className="text-slate-800 dark:text-slate-200">Unidades:</b> mg/kg, µg/kg, ppm o ppb.</li>
+                <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                  <li><b className="text-slate-800 dark:text-slate-100">Contaminante:</b> Nombre del analito (ej: Plomo, Mercurio).</li>
+                  <li><b className="text-slate-800 dark:text-slate-100">Alimento:</b> Tipo de producto muestreado.</li>
+                  <li><b className="text-slate-800 dark:text-slate-100">Lugar/Región:</b> Origen geográfico de las muestras.</li>
+                  <li><b className="text-slate-800 dark:text-slate-100">Unidades:</b> mg/kg, µg/kg, ppm o ppb.</li>
                 </ul>
               </div>
               <div className="space-y-3">
                 <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm">Datos de Concentración</h4>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Ingrese los valores separados por comas, espacios o saltos de línea. Se requiere un <b className="text-cyan-600">mínimo de 3 muestras</b>, aunque se recomiendan más de 10 para mayor precisión.
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  Ingrese los valores separados por comas, espacios o saltos de línea. Se requiere un <b className="text-cyan-600 dark:text-cyan-400">mínimo de 3 muestras</b>, aunque se recomiendan más de 10 para mayor precisión.
                 </p>
-                <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg font-mono text-xs text-slate-500">
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800/50 font-mono text-xs text-slate-500 dark:text-slate-400">
                   0.04, 0.06, 0.03, 0.05...
                 </div>
               </div>
@@ -91,27 +91,27 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose }) => {
               3. Interpretación de Resultados
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 rounded-2xl bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-800/30">
-                <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-bold mb-2">
+              <div className="p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800/30">
+                <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-bold mb-2 text-sm">
                   <CheckCircle2 size={18} /> Bajo Riesgo
                 </div>
-                <p className="text-xs text-green-600 dark:text-green-500/80 leading-relaxed">
+                <p className="text-xs text-green-600 dark:text-green-300/80 leading-relaxed">
                   Cumplimiento ≥ 95%. El lote cumple satisfactoriamente con los límites establecidos.
                 </p>
               </div>
-              <div className="p-4 rounded-2xl bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-800/30">
-                <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400 font-bold mb-2">
+              <div className="p-4 rounded-2xl bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-800/30">
+                <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400 font-bold mb-2 text-sm">
                   <AlertCircle size={18} /> Riesgo Medio
                 </div>
-                <p className="text-xs text-yellow-600 dark:text-yellow-500/80 leading-relaxed">
+                <p className="text-xs text-yellow-600 dark:text-yellow-300/80 leading-relaxed">
                   Cumplimiento 90% - 95%. El lote requiere atención y revisión adicional recomendada.
                 </p>
               </div>
-              <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-800/30">
-                <div className="flex items-center gap-2 text-red-700 dark:text-red-400 font-bold mb-2">
+              <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30">
+                <div className="flex items-center gap-2 text-red-700 dark:text-red-400 font-bold mb-2 text-sm">
                   <AlertCircle size={18} /> Alto Riesgo
                 </div>
-                <p className="text-xs text-red-600 dark:text-red-500/80 leading-relaxed">
+                <p className="text-xs text-red-600 dark:text-red-300/80 leading-relaxed">
                   Cumplimiento &lt; 90%. El lote no cumple. Se deben tomar acciones correctivas inmediatas.
                 </p>
               </div>
@@ -129,21 +129,21 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose }) => {
                 <div className="w-1 bg-cyan-500 rounded-full shrink-0"></div>
                 <div>
                   <h4 className="font-bold text-slate-800 dark:text-slate-100">Método Empírico (Fn(X))</h4>
-                  <p className="text-slate-600 dark:text-slate-400 mt-1">Proporción directa de muestras que están por debajo del límite X. Es simple y no asume ninguna distribución específica.</p>
+                  <p className="text-slate-600 dark:text-slate-300 mt-1">Proporción directa de muestras que están por debajo del límite X. Es simple y no asume ninguna distribución específica.</p>
                 </div>
               </div>
               <div className="flex gap-4">
                 <div className="w-1 bg-indigo-500 rounded-full shrink-0"></div>
                 <div>
                   <h4 className="font-bold text-slate-800 dark:text-slate-100">Modelo Normal</h4>
-                  <p className="text-slate-600 dark:text-slate-400 mt-1">Asume que los datos siguen una campana de Gauss. Recomendado cuando las pruebas de normalidad (Anderson-Darling o Shapiro-Wilk) son positivas.</p>
+                  <p className="text-slate-600 dark:text-slate-300 mt-1">Asume que los datos siguen una campana de Gauss. Recomendado cuando las pruebas de normalidad (Anderson-Darling o Shapiro-Wilk) son positivas.</p>
                 </div>
               </div>
               <div className="flex gap-4">
                 <div className="w-1 bg-purple-500 rounded-full shrink-0"></div>
                 <div>
                   <h4 className="font-bold text-slate-800 dark:text-slate-100">Modelo Log-normal</h4>
-                  <p className="text-slate-600 dark:text-slate-400 mt-1">Adecuado para datos de contaminantes que suelen presentar sesgo positivo (muchos valores bajos y pocos muy altos).</p>
+                  <p className="text-slate-600 dark:text-slate-300 mt-1">Adecuado para datos de contaminantes que suelen presentar sesgo positivo (muchos valores bajos y pocos muy altos).</p>
                 </div>
               </div>
             </div>

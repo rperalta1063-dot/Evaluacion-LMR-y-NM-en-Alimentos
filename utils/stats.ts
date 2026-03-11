@@ -1,5 +1,5 @@
 
-import { Stats, NormalityResults, ComplianceLevel } from '../types';
+import { Stats, NormalityResults, ComplianceLevel, TrendAnalysis, TrendPoint } from '../types';
 
 export const EPS = 1e-12;
 
@@ -145,6 +145,51 @@ export function swPValue(W: number, n: number): number {
   const log_w = Math.log(1 - W);
   const mu = -2.0 + 1.25 * Math.log(n) - 0.5 * Math.log(n) ** 2;
   return cdfN((log_w - mu) / 1.0, 0, 1);
+}
+
+export function calculateTrend(points: { date: string, value: number }[]): TrendAnalysis | undefined {
+  if (points.length < 2) return undefined;
+
+  const trendPoints: TrendPoint[] = points
+    .map(p => ({ ...p, timestamp: new Date(p.date).getTime() }))
+    .filter(p => !isNaN(p.timestamp))
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  if (trendPoints.length < 2) return undefined;
+
+  const n = trendPoints.length;
+  const x = trendPoints.map(p => p.timestamp);
+  const y = trendPoints.map(p => p.value);
+
+  const sumX = x.reduce((a, b) => a + b, 0);
+  const sumY = y.reduce((a, b) => a + b, 0);
+  const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+  const sumXX = x.reduce((sum, xi) => sum + xi * xi, 0);
+
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+
+  // R-squared
+  const yMean = sumY / n;
+  const ssTot = y.reduce((sum, yi) => sum + (yi - yMean) ** 2, 0);
+  const ssRes = y.reduce((sum, yi, i) => sum + (yi - (slope * x[i] + intercept)) ** 2, 0);
+  const r2 = ssTot === 0 ? 1 : 1 - (ssRes / ssTot);
+
+  // Prediction for 30 days in the future
+  const lastTimestamp = x[n - 1];
+  const forecastTimestamp = lastTimestamp + (30 * 24 * 60 * 60 * 1000);
+  const prediction = slope * forecastTimestamp + intercept;
+  const forecastDate = new Date(forecastTimestamp).toISOString().split('T')[0];
+
+  return {
+    slope,
+    intercept,
+    r2,
+    prediction: Math.max(0, prediction),
+    isIncreasing: slope > 0,
+    points: trendPoints,
+    forecastDate
+  };
 }
 
 export const seq = (a: number, b: number, n: number) => Array.from({ length: n }, (_, i) => a + (b - a) * i / (n - 1));
