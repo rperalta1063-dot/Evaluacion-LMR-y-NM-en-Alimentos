@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import 'hammerjs';
 import { 
   Chart as ChartJS, 
   CategoryScale, 
@@ -14,6 +15,7 @@ import {
   Filler
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
+import zoomPlugin from 'chartjs-plugin-zoom';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import { 
@@ -51,7 +53,8 @@ ChartJS.register(
   Title, 
   Tooltip, 
   Legend,
-  Filler
+  Filler,
+  zoomPlugin
 );
 
 const formatSig = (val: number): string => {
@@ -61,6 +64,15 @@ const formatSig = (val: number): string => {
   if (absVal >= 1) return val.toFixed(1);
   const decimals = Math.max(1, Math.ceil(-Math.log10(absVal)));
   return val.toFixed(decimals);
+};
+
+const downloadChartImage = (chartRef: React.RefObject<any>, fileName: string) => {
+  if (chartRef.current) {
+    const link = document.createElement('a');
+    link.download = `${fileName}.png`;
+    link.href = chartRef.current.toBase64Image();
+    link.click();
+  }
 };
 
 const App: React.FC = () => {
@@ -765,6 +777,7 @@ const getChartThemeOptions = (isDark: boolean) => ({
 
 const DistributionAreaChart: React.FC<{result: EvaluationResult, type: 'normal' | 'lognormal', isDark: boolean}> = ({result, type, isDark}) => {
   const {stats, metadata, muLog, sdLog} = result;
+  const chartRef = useRef<any>(null);
   const limitX = metadata.limitX;
   const { textColor, gridColor } = useMemo(() => getChartThemeOptions(isDark), [isDark]);
   
@@ -835,10 +848,43 @@ const DistributionAreaChart: React.FC<{result: EvaluationResult, type: 'normal' 
 
   const options = useMemo(() => ({
     maintainAspectRatio: false,
+    interaction: {
+      intersect: false,
+      mode: 'index' as const,
+    },
     plugins: {
       legend: {
         position: 'bottom' as const,
         labels: { boxWidth: 12, usePointStyle: true, color: textColor }
+      },
+      tooltip: {
+        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+        titleColor: isDark ? '#f1f5f9' : '#1e293b',
+        bodyColor: isDark ? '#cbd5e1' : '#475569',
+        borderColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 1)',
+        borderWidth: 1,
+        padding: 12,
+        cornerRadius: 8,
+        callbacks: {
+          label: (context: any) => {
+            return `${context.dataset.label}: ${context.parsed.y.toFixed(4)}`;
+          }
+        }
+      },
+      zoom: {
+        pan: {
+          enabled: true,
+          mode: 'x' as const,
+        },
+        zoom: {
+          wheel: {
+            enabled: true,
+          },
+          pinch: {
+            enabled: true
+          },
+          mode: 'x' as const,
+        }
       }
     },
     scales: {
@@ -854,13 +900,25 @@ const DistributionAreaChart: React.FC<{result: EvaluationResult, type: 'normal' 
         grid: { color: gridColor }
       }
     }
-  }), [textColor, gridColor, metadata.units]);
+  }), [textColor, gridColor, metadata.units, isDark]);
 
-  return <Chart type="line" data={chartData} options={options} />;
+  return (
+    <div className="relative h-full w-full">
+      <button 
+        onClick={() => downloadChartImage(chartRef, `Modelo_${type === 'normal' ? 'Normal' : 'Lognormal'}`)}
+        className="absolute top-0 right-0 z-10 p-1.5 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm transition-all text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-400"
+        title="Exportar como PNG"
+      >
+        <Download size={14} />
+      </button>
+      <Chart ref={chartRef} type="line" data={chartData} options={options} />
+    </div>
+  );
 };
 
 const TrendChart: React.FC<{result: EvaluationResult, isDark: boolean}> = ({result, isDark}) => {
   const {trend, metadata} = result;
+  const chartRef = useRef<any>(null);
   const { textColor, gridColor } = useMemo(() => getChartThemeOptions(isDark), [isDark]);
   
   if (!trend) return <div className="flex items-center justify-center h-full text-slate-400">Datos insuficientes para análisis de tendencia</div>;
@@ -904,10 +962,38 @@ const TrendChart: React.FC<{result: EvaluationResult, isDark: boolean}> = ({resu
     ]
   };
 
-  const options = {
+  const options = useMemo(() => ({
     maintainAspectRatio: false,
+    interaction: {
+      intersect: false,
+      mode: 'index' as const,
+    },
     plugins: {
-      legend: { position: 'bottom' as const, labels: { color: textColor, boxWidth: 12 } }
+      legend: { position: 'bottom' as const, labels: { color: textColor, boxWidth: 12 } },
+      tooltip: {
+        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+        titleColor: isDark ? '#f1f5f9' : '#1e293b',
+        bodyColor: isDark ? '#cbd5e1' : '#475569',
+        borderColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 1)',
+        borderWidth: 1,
+        padding: 12,
+        cornerRadius: 8,
+      },
+      zoom: {
+        pan: {
+          enabled: true,
+          mode: 'x' as const,
+        },
+        zoom: {
+          wheel: {
+            enabled: true,
+          },
+          pinch: {
+            enabled: true
+          },
+          mode: 'x' as const,
+        }
+      }
     },
     scales: {
       y: { 
@@ -920,13 +1006,25 @@ const TrendChart: React.FC<{result: EvaluationResult, isDark: boolean}> = ({resu
         grid: { display: false } 
       }
     }
-  };
+  }), [textColor, gridColor, metadata.units, isDark]);
 
-  return <Chart type="line" data={data} options={options} />;
+  return (
+    <div className="relative h-full w-full">
+      <button 
+        onClick={() => downloadChartImage(chartRef, 'Analisis_Tendencia')}
+        className="absolute top-0 right-0 z-10 p-1.5 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm transition-all text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-400"
+        title="Exportar como PNG"
+      >
+        <Download size={14} />
+      </button>
+      <Chart ref={chartRef} type="line" data={data} options={options} />
+    </div>
+  );
 };
 
 const HistogramChart: React.FC<{result: EvaluationResult, isDark: boolean}> = ({result, isDark}) => {
   const {stats, metadata} = result;
+  const chartRef = useRef<any>(null);
   const { textColor, gridColor } = useMemo(() => getChartThemeOptions(isDark), [isDark]);
   
   const chartData = useMemo(() => {
@@ -986,20 +1084,60 @@ const HistogramChart: React.FC<{result: EvaluationResult, isDark: boolean}> = ({
 
   const options = useMemo(() => ({ 
     maintainAspectRatio: false, 
+    interaction: {
+      intersect: false,
+      mode: 'index' as const,
+    },
     plugins: { 
-      legend: { position: 'bottom' as const, labels: { color: textColor } } 
+      legend: { position: 'bottom' as const, labels: { color: textColor } },
+      tooltip: {
+        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+        titleColor: isDark ? '#f1f5f9' : '#1e293b',
+        bodyColor: isDark ? '#cbd5e1' : '#475569',
+        borderColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 1)',
+        borderWidth: 1,
+        padding: 12,
+        cornerRadius: 8,
+      },
+      zoom: {
+        pan: {
+          enabled: true,
+          mode: 'x' as const,
+        },
+        zoom: {
+          wheel: {
+            enabled: true,
+          },
+          pinch: {
+            enabled: true
+          },
+          mode: 'x' as const,
+        }
+      }
     },
     scales: {
       y: { ticks: { color: textColor }, grid: { color: gridColor } },
       x: { ticks: { color: textColor }, grid: { color: gridColor } }
     }
-  }), [textColor, gridColor]);
+  }), [textColor, gridColor, isDark]);
 
-  return <Chart type="bar" data={chartData} options={options} />;
+  return (
+    <div className="relative h-full w-full">
+      <button 
+        onClick={() => downloadChartImage(chartRef, 'Distribucion_Frecuencias')}
+        className="absolute top-0 right-0 z-10 p-1.5 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm transition-all text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-400"
+        title="Exportar como PNG"
+      >
+        <Download size={14} />
+      </button>
+      <Chart ref={chartRef} type="bar" data={chartData} options={options} />
+    </div>
+  );
 };
 
 const QQChart: React.FC<{result: EvaluationResult, isDark: boolean}> = ({result, isDark}) => {
   const {stats} = result;
+  const chartRef = useRef<any>(null);
   const { textColor, gridColor } = useMemo(() => getChartThemeOptions(isDark), [isDark]);
   
   const chartData = useMemo(() => {
@@ -1047,15 +1185,56 @@ const QQChart: React.FC<{result: EvaluationResult, isDark: boolean}> = ({result,
         grid: { color: gridColor }
       } 
     },
-    plugins: { legend: { display: false } }
-  }), [textColor, gridColor]);
+    plugins: { 
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+        titleColor: isDark ? '#f1f5f9' : '#1e293b',
+        bodyColor: isDark ? '#cbd5e1' : '#475569',
+        borderColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 1)',
+        borderWidth: 1,
+        padding: 12,
+        cornerRadius: 8,
+        callbacks: {
+          label: (context: any) => {
+            return `Teórico: ${context.parsed.x.toFixed(4)}, Observado: ${context.parsed.y.toFixed(4)}`;
+          }
+        }
+      },
+      zoom: {
+        pan: {
+          enabled: true,
+          mode: 'xy' as const,
+        },
+        zoom: {
+          wheel: {
+            enabled: true,
+          },
+          pinch: {
+            enabled: true
+          },
+          mode: 'xy' as const,
+        }
+      }
+    }
+  }), [textColor, gridColor, isDark]);
 
   return (
-    <Chart 
-      type="scatter" 
-      data={chartData as any} 
-      options={options} 
-    />
+    <div className="relative h-full w-full">
+      <button 
+        onClick={() => downloadChartImage(chartRef, 'Grafico_QQ')}
+        className="absolute top-0 right-0 z-10 p-1.5 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm transition-all text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-400"
+        title="Exportar como PNG"
+      >
+        <Download size={14} />
+      </button>
+      <Chart 
+        ref={chartRef}
+        type="scatter" 
+        data={chartData as any} 
+        options={options} 
+      />
+    </div>
   );
 };
 

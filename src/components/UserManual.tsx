@@ -90,7 +90,7 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose }) => {
               <AlertCircle size={20} className="text-cyan-600" />
               3. Interpretación de Resultados
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800/30">
                 <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-bold mb-2 text-sm">
                   <CheckCircle2 size={18} /> Bajo Riesgo
@@ -115,6 +115,25 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose }) => {
                   Cumplimiento &lt; 90%. El lote no cumple. Se deben tomar acciones correctivas inmediatas.
                 </p>
               </div>
+            </div>
+
+            <div className="bg-cyan-50 dark:bg-cyan-900/10 p-5 rounded-2xl border border-cyan-100 dark:border-cyan-800/30">
+              <h4 className="font-bold text-cyan-800 dark:text-cyan-300 text-sm mb-3 flex items-center gap-2">
+                <CheckCircle2 size={16} /> Pruebas de Normalidad (p-valor)
+              </h4>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
+                Las pruebas de <b>Anderson-Darling</b> y <b>Shapiro-Wilk</b> determinan si sus datos pueden ser modelados por una distribución normal:
+              </p>
+              <ul className="space-y-2 text-xs">
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-cyan-700 dark:text-cyan-400">p &gt; 0.05:</span>
+                  <span className="text-slate-600 dark:text-slate-300">Los datos son <b>Normales</b>. El "Modelo Normal" es el más confiable para sus conclusiones.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-amber-600 dark:text-amber-400">p ≤ 0.05:</span>
+                  <span className="text-slate-600 dark:text-slate-300">Los datos <b>NO son Normales</b>. Use el "Método Empírico" o el "Modelo Log-normal" si hay sesgo.</span>
+                </li>
+              </ul>
             </div>
           </section>
 
