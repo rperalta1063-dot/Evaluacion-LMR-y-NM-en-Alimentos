@@ -723,6 +723,7 @@ const App: React.FC = () => {
                    <ComplianceRow label="Prueba Empírica" percent={result.pEmp} risk={result.empiricalRisk} isDark={isDark} />
                    <ComplianceRow label="Modelo Normal" percent={result.pNormal} risk={result.normalRisk} isDark={isDark} />
                    <ComplianceRow label="Modelo Log-normal" percent={result.pLog} risk={result.logNormalRisk} isDark={isDark} />
+                   <ComplianceRow label="Modelo Gamma" percent={result.pGamma} risk={result.gammaRisk} isDark={isDark} />
                    
                    <div className={`mt-6 p-4 rounded-xl border ${result.normality.isNormal ? 'bg-green-50 dark:bg-green-900/10 border-green-100 dark:border-green-800/30 text-green-800 dark:text-green-400' : 'bg-orange-50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-800/30 text-orange-800 dark:text-orange-400'}`}>
                       <div className="flex gap-3">
@@ -779,7 +780,8 @@ const App: React.FC = () => {
                        <tr className="border-b border-slate-100 dark:border-slate-800">
                          <th className="py-2 font-bold text-slate-400 dark:text-slate-500">Referencia</th>
                          <th className="py-2 font-bold text-slate-400 dark:text-slate-500 text-right">Valor</th>
-                         <th className="py-2 font-bold text-slate-400 dark:text-slate-500 text-right">Status</th>
+                         <th className="py-2 font-bold text-slate-400 dark:text-slate-500 text-right">Límite X</th>
+                         <th className="py-2 font-bold text-slate-400 dark:text-slate-500 text-center">Estado</th>
                        </tr>
                      </thead>
                      <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
@@ -787,11 +789,18 @@ const App: React.FC = () => {
                          <tr key={p.label}>
                            <td className="py-3 font-medium text-slate-600 dark:text-slate-300">{p.label}</td>
                            <td className="py-3 text-right font-mono text-slate-800 dark:text-slate-200">{formatSig(p.value)}</td>
-                           <td className="py-3 text-right">
+                           <td className="py-3 text-right font-mono text-slate-400 dark:text-slate-500">{formatSig(result.metadata.limitX)}</td>
+                           <td className="py-3 text-center">
                              {p.complies ? (
-                               <span className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-tight">Cumple</span>
+                               <div className="flex items-center justify-center gap-1 text-green-600 dark:text-green-400" title="Cumple con el límite">
+                                 <CheckCircle size={14} />
+                                 <span className="text-[10px] font-bold uppercase tracking-tight">OK</span>
+                               </div>
                              ) : (
-                               <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-tight">Sobre X</span>
+                               <div className="flex items-center justify-center gap-1 text-red-600 dark:text-red-400" title="Supera el límite">
+                                 <AlertTriangle size={14} />
+                                 <span className="text-[10px] font-bold uppercase tracking-tight">Sobre X</span>
+                               </div>
                              )}
                            </td>
                          </tr>
