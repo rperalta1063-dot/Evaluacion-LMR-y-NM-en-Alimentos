@@ -37,9 +37,14 @@ import {
   Hash,
   Moon,
   Sun,
-  BookOpen
+  BookOpen,
+  Bell,
+  Settings,
+  ShieldAlert,
+  Check,
+  X as CloseIcon
 } from 'lucide-react';
-import { Metadata, EvaluationResult, Stats, NormalityResults } from './types';
+import { Metadata, EvaluationResult, Stats, NormalityResults, AlertSettings, Alert } from './types';
 import * as statsUtil from './utils/stats';
 import UserManual from './src/components/UserManual';
 
@@ -97,7 +102,28 @@ const App: React.FC = () => {
   const [dataInput, setDataInput] = useState<string>('0.04, 0.06, 0.03, 0.05, 0.08, 0.04, 0.02, 0.01, 0.02, 0.03, 0.07, 0.05, 0.06, 0.03, 0.02');
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const [isManualOpen, setIsManualOpen] = useState(false);
+  const [isAlertSettingsOpen, setIsAlertSettingsOpen] = useState(false);
+  const [alertSettings, setAlertSettings] = useState<AlertSettings>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('alertSettings');
+      if (saved) return JSON.parse(saved);
+    }
+    return {
+      thresholdEnabled: true,
+      thresholdValue: 0.1,
+      meanEnabled: true,
+      meanValue: 0.05,
+      trendEnabled: true,
+      outlierEnabled: true,
+      normalityEnabled: true
+    };
+  });
+  const [alerts, setAlerts] = useState<Alert[]>([]);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem('alertSettings', JSON.stringify(alertSettings));
+  }, [alertSettings]);
 
   useEffect(() => {
     if (isDark) {
@@ -205,6 +231,69 @@ const App: React.FC = () => {
     };
 
     setResult(evalResult);
+
+    // Alert System Logic
+    const newAlerts: Alert[] = [];
+    const now = Date.now();
+
+    if (alertSettings.thresholdEnabled) {
+      const exceedances = rawValues.filter(v => v > alertSettings.thresholdValue);
+      if (exceedances.length > 0) {
+        newAlerts.push({
+          id: `threshold-${now}`,
+          type: 'danger',
+          title: 'Umbral Crítico Superado',
+          message: `Se detectaron ${exceedances.length} muestras que superan el umbral de seguridad configurado (${alertSettings.thresholdValue} ${metadata.units}).`,
+          timestamp: now
+        });
+      }
+    }
+
+    if (alertSettings.meanEnabled && st.mean > alertSettings.meanValue) {
+      newAlerts.push({
+        id: `mean-${now}`,
+        type: 'warning',
+        title: 'Media Elevada',
+        message: `La concentración media (${st.mean.toFixed(4)}) supera el límite preventivo configurado (${alertSettings.meanValue} ${metadata.units}).`,
+        timestamp: now
+      });
+    }
+
+    if (alertSettings.trendEnabled && trend && trend.isIncreasing && trend.r2 > 0.5) {
+      newAlerts.push({
+        id: `trend-${now}`,
+        type: 'warning',
+        title: 'Tendencia Ascendente Detectada',
+        message: `Se observa una tendencia al alza significativa (R² = ${trend.r2.toFixed(4)}). La concentración podría superar los límites en el futuro cercano.`,
+        timestamp: now
+      });
+    }
+
+    if (alertSettings.outlierEnabled) {
+      const upperLimit = st.mean + 3 * st.sd;
+      const outliers = rawValues.filter(v => v > upperLimit);
+      if (outliers.length > 0) {
+        newAlerts.push({
+          id: `outlier-${now}`,
+          type: 'info',
+          title: 'Patrón Inusual (Outliers)',
+          message: `Se detectaron ${outliers.length} valores atípicos que superan las 3 desviaciones estándar. Esto puede indicar contaminación puntual o errores de medición.`,
+          timestamp: now
+        });
+      }
+    }
+
+    if (alertSettings.normalityEnabled && !normality.isNormal && st.n > 10) {
+      newAlerts.push({
+        id: `normality-${now}`,
+        type: 'info',
+        title: 'Distribución No Normal',
+        message: 'Los datos no siguen una distribución normal. Los cálculos basados en el Modelo Normal podrían no ser precisos.',
+        timestamp: now
+      });
+    }
+
+    setAlerts(newAlerts);
     
     setTimeout(() => {
       resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -339,6 +428,20 @@ const App: React.FC = () => {
           
           <div className="flex items-center gap-3">
             <button 
+              onClick={() => setIsAlertSettingsOpen(true)}
+              className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm flex items-center gap-2 relative"
+              title="Configurar Alertas"
+            >
+              <Bell size={20} className={alerts.length > 0 ? "text-red-500 animate-pulse" : "text-slate-400"} />
+              {alerts.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white dark:border-slate-900">
+                  {alerts.length}
+                </span>
+              )}
+              <span className="hidden sm:inline text-sm font-semibold">Alertas</span>
+            </button>
+
+            <button 
               onClick={() => setIsManualOpen(true)}
               className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm flex items-center gap-2"
               title="Manual de Uso"
@@ -359,6 +462,38 @@ const App: React.FC = () => {
         {/* Input Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div className="lg:col-span-2 space-y-6">
+            {/* Alerts Display */}
+            {alerts.length > 0 && (
+              <div className="space-y-3">
+                {alerts.map(alert => (
+                  <div 
+                    key={alert.id}
+                    className={`p-4 rounded-2xl border flex items-start gap-4 animate-in slide-in-from-top-2 duration-300 ${
+                      alert.type === 'danger' 
+                        ? 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800/30 text-red-800 dark:text-red-200' 
+                        : alert.type === 'warning'
+                        ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800/30 text-amber-800 dark:text-amber-200'
+                        : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/30 text-blue-800 dark:text-blue-200'
+                    }`}
+                  >
+                    <div className="mt-0.5">
+                      {alert.type === 'danger' ? <ShieldAlert size={20} /> : <AlertTriangle size={20} />}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-sm">{alert.title}</h4>
+                      <p className="text-xs opacity-90 mt-1">{alert.message}</p>
+                    </div>
+                    <button 
+                      onClick={() => setAlerts(prev => prev.filter(a => a.id !== alert.id))}
+                      className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors"
+                    >
+                      <CloseIcon size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
               <h2 className="flex items-center gap-2 text-lg font-semibold mb-4 text-slate-700 dark:text-slate-200">
                 <Database size={20} className="text-cyan-600" />
@@ -714,6 +849,136 @@ const App: React.FC = () => {
       </div>
 
       <UserManual isOpen={isManualOpen} onClose={() => setIsManualOpen(false)} />
+
+      {/* Alert Settings Modal */}
+      {isAlertSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 rounded-lg">
+                  <Settings size={24} />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Configurar Alertas</h2>
+              </div>
+              <button 
+                onClick={() => setIsAlertSettingsOpen(false)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              >
+                <CloseIcon size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${alertSettings.thresholdEnabled ? 'bg-red-100 text-red-600' : 'bg-slate-200 text-slate-400'}`}>
+                      <ShieldAlert size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Umbral Crítico</p>
+                      <p className="text-[10px] text-slate-500">Alerta si algún valor supera X</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setAlertSettings({...alertSettings, thresholdEnabled: !alertSettings.thresholdEnabled})}
+                    className={`w-12 h-6 rounded-full transition-all relative ${alertSettings.thresholdEnabled ? 'bg-cyan-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${alertSettings.thresholdEnabled ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+                {alertSettings.thresholdEnabled && (
+                  <div className="pl-14">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Valor del Umbral ({metadata.units})</label>
+                    <input 
+                      type="number"
+                      step="any"
+                      className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none transition-all text-sm dark:text-slate-100"
+                      value={alertSettings.thresholdValue}
+                      onChange={e => setAlertSettings({...alertSettings, thresholdValue: parseFloat(e.target.value)})}
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${alertSettings.meanEnabled ? 'bg-amber-100 text-amber-600' : 'bg-slate-200 text-slate-400'}`}>
+                      <Activity size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Media Preventiva</p>
+                      <p className="text-[10px] text-slate-500">Alerta si el promedio supera X</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setAlertSettings({...alertSettings, meanEnabled: !alertSettings.meanEnabled})}
+                    className={`w-12 h-6 rounded-full transition-all relative ${alertSettings.meanEnabled ? 'bg-cyan-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${alertSettings.meanEnabled ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+                {alertSettings.meanEnabled && (
+                  <div className="pl-14">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Valor de Media ({metadata.units})</label>
+                    <input 
+                      type="number"
+                      step="any"
+                      className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none transition-all text-sm dark:text-slate-100"
+                      value={alertSettings.meanValue}
+                      onChange={e => setAlertSettings({...alertSettings, meanValue: parseFloat(e.target.value)})}
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${alertSettings.trendEnabled ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-400'}`}>
+                      <TrendingUp size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Tendencia Crítica</p>
+                      <p className="text-[10px] text-slate-500">Alerta si hay tendencia al alza</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setAlertSettings({...alertSettings, trendEnabled: !alertSettings.trendEnabled})}
+                    className={`w-12 h-6 rounded-full transition-all relative ${alertSettings.trendEnabled ? 'bg-cyan-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${alertSettings.trendEnabled ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${alertSettings.outlierEnabled ? 'bg-purple-100 text-purple-600' : 'bg-slate-200 text-slate-400'}`}>
+                      <Hash size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Patrones Atípicos</p>
+                      <p className="text-[10px] text-slate-500">Alerta sobre valores extremos</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setAlertSettings({...alertSettings, outlierEnabled: !alertSettings.outlierEnabled})}
+                    className={`w-12 h-6 rounded-full transition-all relative ${alertSettings.outlierEnabled ? 'bg-cyan-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${alertSettings.outlierEnabled ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setIsAlertSettingsOpen(false)}
+                className="w-full py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-cyan-200 dark:shadow-none flex items-center justify-center gap-2"
+              >
+                <Check size={20} />
+                Guardar Configuración
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

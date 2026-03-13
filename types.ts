@@ -74,3 +74,21 @@ export interface EvaluationResult {
   percentiles: Array<{ label: string; value: number; percent: number; complies: boolean }>;
   trend?: TrendAnalysis;
 }
+
+export interface AlertSettings {
+  thresholdEnabled: boolean;
+  thresholdValue: number;
+  meanEnabled: boolean;
+  meanValue: number;
+  trendEnabled: boolean;
+  outlierEnabled: boolean;
+  normalityEnabled: boolean;
+}
+
+export interface Alert {
+  id: string;
+  type: 'danger' | 'warning' | 'info';
+  title: string;
+  message: string;
+  timestamp: number;
+}
