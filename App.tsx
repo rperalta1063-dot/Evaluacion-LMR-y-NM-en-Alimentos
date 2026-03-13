@@ -203,6 +203,11 @@ const App: React.FC = () => {
     const pNormal = statsUtil.cdfN(X, st.mean, st.sd) * 100;
     const pLog = isFinite(sdLog) ? statsUtil.cdfN(Math.log(X), muLog, sdLog) * 100 : 0;
 
+    // Gamma distribution parameters (Method of Moments)
+    const gammaShape = (st.mean ** 2) / (st.sd ** 2 || statsUtil.EPS);
+    const gammaScale = (st.sd ** 2) / (st.mean || statsUtil.EPS);
+    const pGamma = statsUtil.cdfGamma(X, gammaShape, gammaScale) * 100;
+
     const trend = statsUtil.calculateTrend(rawPoints);
 
     const evalResult: EvaluationResult = {
@@ -212,13 +217,17 @@ const App: React.FC = () => {
       pEmp,
       pNormal,
       pLog,
+      pGamma,
       muLog,
       sdLog,
+      gammaShape,
+      gammaScale,
       zNormal: (X - st.mean) / Math.max(st.sd, statsUtil.EPS),
       zLog: isFinite(sdLog) ? (Math.log(X) - muLog) / Math.max(sdLog, statsUtil.EPS) : NaN,
       empiricalRisk: statsUtil.getRiskLevel(pEmp),
       normalRisk: statsUtil.getRiskLevel(pNormal),
       logNormalRisk: statsUtil.getRiskLevel(pLog),
+      gammaRisk: statsUtil.getRiskLevel(pGamma),
       percentiles: [
         { label: 'P25', value: statsUtil.getPercentile(st.sorted, 25), percent: 25, complies: X >= statsUtil.getPercentile(st.sorted, 25) },
         { label: 'P50', value: statsUtil.getPercentile(st.sorted, 50), percent: 50, complies: X >= statsUtil.getPercentile(st.sorted, 50) },
@@ -333,6 +342,7 @@ const App: React.FC = () => {
       ['Empírico', result.pEmp.toFixed(2), result.empiricalRisk.level],
       ['Normal', result.pNormal.toFixed(2), result.normalRisk.level],
       ['Log-normal', result.pLog.toFixed(2), result.logNormalRisk.level],
+      ['Gamma', result.pGamma.toFixed(2), result.gammaRisk.level],
       [],
       ['Percentiles', 'Valor'],
       ...result.percentiles.map(p => [p.label, p.value.toFixed(4)])
@@ -381,7 +391,8 @@ const App: React.FC = () => {
     doc.setFontSize(10);
     doc.text(`Modelo Empírico: ${result.pEmp.toFixed(2)}% - ${result.empiricalRisk.level}`, 25, y); y += 6;
     doc.text(`Modelo Normal: ${result.pNormal.toFixed(2)}% - ${result.normalRisk.level}`, 25, y); y += 6;
-    doc.text(`Modelo Log-normal: ${result.pLog.toFixed(2)}% - ${result.logNormalRisk.level}`, 25, y); y += 12;
+    doc.text(`Modelo Log-normal: ${result.pLog.toFixed(2)}% - ${result.logNormalRisk.level}`, 25, y); y += 6;
+    doc.text(`Modelo Gamma: ${result.pGamma.toFixed(2)}% - ${result.gammaRisk.level}`, 25, y); y += 12;
 
     doc.setFontSize(14);
     doc.text('Pruebas de Normalidad', 20, y);
@@ -727,7 +738,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
                    <TrendingUp size={20} className="text-green-600" />
@@ -745,6 +756,16 @@ const App: React.FC = () => {
                  </h3>
                  <div className="h-[350px]">
                    <DistributionAreaChart result={result} type="lognormal" isDark={isDark} />
+                 </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
+                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                   <TrendingUp size={20} className="text-purple-600" />
+                   Modelo Gamma: Áreas de Cumplimiento
+                 </h3>
+                 <div className="h-[350px]">
+                   <DistributionAreaChart result={result} type="gamma" isDark={isDark} />
                  </div>
               </div>
             </div>
@@ -1040,8 +1061,8 @@ const getChartThemeOptions = (isDark: boolean) => ({
   gridColor: isDark ? 'rgba(51, 65, 85, 0.3)' : 'rgba(226, 232, 240, 0.5)', // Subtle grid for dark mode (slate-700)
 });
 
-const DistributionAreaChart: React.FC<{result: EvaluationResult, type: 'normal' | 'lognormal', isDark: boolean}> = ({result, type, isDark}) => {
-  const {stats, metadata, muLog, sdLog} = result;
+const DistributionAreaChart: React.FC<{result: EvaluationResult, type: 'normal' | 'lognormal' | 'gamma', isDark: boolean}> = ({result, type, isDark}) => {
+  const {stats, metadata, muLog, sdLog, gammaShape, gammaScale} = result;
   const chartRef = useRef<any>(null);
   const limitX = metadata.limitX;
   const { textColor, gridColor } = useMemo(() => getChartThemeOptions(isDark), [isDark]);
@@ -1051,14 +1072,18 @@ const DistributionAreaChart: React.FC<{result: EvaluationResult, type: 'normal' 
     if (type === 'normal') {
       xMin = stats.mean - 4 * stats.sd;
       xMax = stats.mean + 4 * stats.sd;
-    } else {
+    } else if (type === 'lognormal') {
       xMin = Math.exp(muLog - 4 * sdLog);
       xMax = Math.exp(muLog + 4 * sdLog);
+    } else {
+      // Gamma distribution range
+      xMin = Math.max(0, stats.mean - 4 * stats.sd);
+      xMax = stats.mean + 4 * stats.sd;
     }
 
     xMin = Math.min(xMin, limitX * 0.5);
     xMax = Math.max(xMax, limitX * 1.5);
-    if (xMin < 0 && type === 'lognormal') xMin = 0.0001;
+    if (xMin < 0 && (type === 'lognormal' || type === 'gamma')) xMin = 0.0001;
 
     const points = 100;
     const step = (xMax - xMin) / points;
@@ -1072,7 +1097,9 @@ const DistributionAreaChart: React.FC<{result: EvaluationResult, type: 'normal' 
       
       const density = type === 'normal' 
         ? statsUtil.densN(x, stats.mean, stats.sd)
-        : statsUtil.densLN(x, muLog, sdLog);
+        : type === 'lognormal'
+        ? statsUtil.densLN(x, muLog, sdLog)
+        : statsUtil.densGamma(x, gammaShape, gammaScale);
 
       if (x <= limitX) {
         complianceData.push(density);

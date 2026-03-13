@@ -165,6 +165,13 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose }) => {
                   <p className="text-slate-600 dark:text-slate-300 mt-1">Adecuado para datos de contaminantes que suelen presentar sesgo positivo (muchos valores bajos y pocos muy altos).</p>
                 </div>
               </div>
+              <div className="flex gap-4">
+                <div className="w-1 bg-pink-500 rounded-full shrink-0"></div>
+                <div>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100">Modelo Gamma</h4>
+                  <p className="text-slate-600 dark:text-slate-300 mt-1">Útil para datos sesgados positivamente que no pueden ser negativos. Es flexible y se ajusta bien a concentraciones de contaminantes que presentan colas largas hacia la derecha.</p>
+                </div>
+              </div>
             </div>
           </section>
 

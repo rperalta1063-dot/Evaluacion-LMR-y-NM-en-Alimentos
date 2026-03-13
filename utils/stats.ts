@@ -29,6 +29,61 @@ export const densN = (x: number, mu: number, sd: number): number =>
 export const densLN = (x: number, mu: number, sd: number): number =>
   x <= 0 ? 0 : (1 / (x * Math.max(sd, EPS) * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * ((Math.log(x) - mu) / Math.max(sd, EPS)) ** 2);
 
+export function logGamma(x: number): number {
+  const c = [
+    76.18009172947146, -86.50532032941677, 24.01409824083091,
+    -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5
+  ];
+  let y = x;
+  let tmp = x + 5.5;
+  tmp -= (x + 0.5) * Math.log(tmp);
+  let ser = 1.000000000190015;
+  for (let i = 0; i < 6; i++) ser += c[i] / ++y;
+  return -tmp + Math.log(2.5066282746310005 * ser / x);
+}
+
+export function regularizedLowerIncompleteGamma(a: number, x: number): number {
+  if (x <= 0) return 0;
+  if (x < a + 1) {
+    let sum = 1 / a;
+    let term = sum;
+    for (let i = 1; i < 100; i++) {
+      term *= x / (a + i);
+      sum += term;
+      if (term < sum * 1e-14) break;
+    }
+    return sum * Math.exp(-x + a * Math.log(x) - logGamma(a));
+  } else {
+    let b = x + 1 - a;
+    let c = 1 / EPS;
+    let d = 1 / b;
+    let h = d;
+    for (let i = 1; i < 100; i++) {
+      const an = -i * (i - a);
+      b += 2;
+      d = an * d + b;
+      if (Math.abs(d) < EPS) d = EPS;
+      c = b + an / c;
+      if (Math.abs(c) < EPS) c = EPS;
+      d = 1 / d;
+      const del = d * c;
+      h *= del;
+      if (Math.abs(del - 1) < EPS) break;
+    }
+    return 1 - h * Math.exp(-x + a * Math.log(x) - logGamma(a));
+  }
+}
+
+export function cdfGamma(x: number, shape: number, scale: number): number {
+  if (x <= 0) return 0;
+  return regularizedLowerIncompleteGamma(shape, x / scale);
+}
+
+export function densGamma(x: number, shape: number, scale: number): number {
+  if (x <= 0) return 0;
+  return Math.exp((shape - 1) * Math.log(x) - x / scale - shape * Math.log(scale) - logGamma(shape));
+}
+
 export function getDescStats(data: number[]): Stats {
   const n = data.length;
   if (n === 0) {

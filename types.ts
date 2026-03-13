@@ -64,13 +64,17 @@ export interface EvaluationResult {
   pEmp: number;
   pNormal: number;
   pLog: number;
+  pGamma: number;
   zNormal: number;
   zLog: number;
   muLog: number;
   sdLog: number;
+  gammaShape: number;
+  gammaScale: number;
   empiricalRisk: ComplianceLevel;
   normalRisk: ComplianceLevel;
   logNormalRisk: ComplianceLevel;
+  gammaRisk: ComplianceLevel;
   percentiles: Array<{ label: string; value: number; percent: number; complies: boolean }>;
   trend?: TrendAnalysis;
 }
